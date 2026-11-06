@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Зикр — Автосчётчик</title>
+<style>
+  :root{
+    --accent:#3ee6b4;
+    --accent2:#7fd4ff;
+    --gold:#ffd27a;
+    --text-dim:#6b7688;
+    --danger:#ff6b81;
+    --card:#12151c;
+    --card-border:#262c38;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:#000;
+    color:#eef1f7;
+    font-family:'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+    overflow:hidden;
+  }
+  #app{ position:relative; height:100vh; height:100dvh; width:100vw; }
+
+  .page{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    opacity:0; pointer-events:none;
+    transition: opacity .25s ease;
+  }
+  .page.active{ opacity:1; pointer-events:auto; }
+
+  /* ================= MAIN DARK SCREEN ================= */
+  #mainPage{
+    background:#000;
+    justify-content:space-between;
+    padding: calc(10px + env(safe-area-inset-top)) 16px calc(10px + env(safe-area-inset-bottom));
+    overflow-y:auto;
+  }
+
+  .top-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    flex-shrink:0;
+    transition: opacity .3s ease;
+  }
+  #mainPage.running .top-bar,
+  #mainPage.running .controls,
+  #mainPage.running .goal-line{
+    opacity:0;
+    pointer-events:none;
+  }
+  #mainPage.running.chrome-visible .top-bar,
+  #mainPage.running.chrome-visible .controls,
+  #mainPage.running.chrome-visible .goal-line{
+    opacity:1;
+    pointer-events:auto;
+  }
+  .icon-btn{
+    width:40px; height:40px; border-radius:50%;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim); font-size:18px; cursor:pointer;
+    flex-shrink:0;
+  }
+  .icon-btn:active{ transform:scale(.9); }
+
+  .stage{
+    flex:1;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:clamp(8px, 2.5vh, 24px);
+    text-align:center;
+    min-height:0;
+    padding: 1.5vh 6px;
+  }
+
+  #nameDisplay{
+    font-size: clamp(30px, 9vw, 72px);
+    font-weight:900;
+    line-height:1.2;
+    letter-spacing:.4px;
+    max-width:96%;
+    word-break:break-word;
+    opacity:0;
+    color: var(--text-color, #fff);
+    transform: scale(.85);
+    transition: opacity .5s ease, transform .5s ease;
+  }
+  #nameDisplay.show{
+    opacity:1; transform:scale(1);
+  }
+  #nameDisplay .arabic{
+    display:block;
+    font-size: clamp(24px, 7vw, 56px);
+    margin-bottom:10px;
+    direction:rtl;
+  }
+
+  #countDisplay{
+    font-size: clamp(110px, 42vw, 320px);
+    font-weight:400;
+    line-height:1;
+    letter-spacing:1px;
+    color: var(--text-color, #fff);
+    opacity:0;
+    transform: scale(.8);
+    transition: opacity .45s ease, transform .45s ease;
+  }
+  #countDisplay.show{ opacity:1; transform:scale(1); }
+
+  .goal-line{
+    font-size: clamp(12px, 3vw, 16px);
+    color:var(--text-dim);
+    font-weight:600;
+    min-height:18px;
+    transition: opacity .3s ease;
+  }
+
+  .idle-hint{
+    color:var(--text-dim);
+    font-size:14px;
+    text-align:center;
+    padding: 0 20px;
+  }
+
+  /* bottom controls */
+  .controls{
+    display:flex; flex-direction:column; gap:10px;
+    flex-shrink:0;
+    transition: opacity .3s ease;
+  }
+  .speed-row{
+    display:flex; align-items:center; gap:12px;
+  }
+  .speed-row label{
+    font-size:12.5px; color:var(--text-dim); font-weight:600; white-space:nowrap;
+  }
+  .speed-row input[type=range]{
+    flex:1;
+    -webkit-appearance:none;
+    height:6px; border-radius:6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    outline:none;
+  }
+  .speed-row input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:22px; height:22px; border-radius:50%;
+    background:#fff; border:3px solid var(--accent);
+    cursor:pointer;
+  }
+  .speed-val{
+    font-size:13px; font-weight:700; color:var(--accent2); width:52px; text-align:right; flex-shrink:0;
+  }
+
+  .btn-row{ display:flex; gap:10px; }
+  .big-btn{
+    flex:1;
+    padding:13px 10px;
+    border-radius:16px;
+    border:1px solid var(--card-border);
+    background:var(--card);
+    color:#dfe6f2;
+    font-size:15px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    cursor:pointer;
+  }
+  .big-btn:active{ transform:scale(.96); }
+  .big-btn.start{
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    color:#06241a; border-color:transparent;
+  }
+  .big-btn.stop{
+    background: linear-gradient(90deg, var(--danger), #ff9472);
+    color:#2a0a0a; border-color:transparent;
+  }
+  .big-btn.reset{ color:var(--danger); border-color:rgba(255,107,129,.3); }
+
+  .tasbih-select-row{
+    display:flex; align-items:center; gap:10px;
+  }
+  .tasbih-pick{
+    flex:1;
+    padding:12px 14px;
+    border-radius:14px;
+    background:var(--card); border:1px solid var(--card-border);
+    color:#dfe6f2; font-size:14px; font-weight:700;
+    display:flex; align-items:center; justify-content:space-between;
+    cursor:pointer;
+  }
+  .tasbih-pick .chev{ color:var(--text-dim); font-size:12px; }
+
+  /* ================= SETTINGS PAGE ================= */
+  #settingsPage{
+    background:#0a0e17;
+    padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+  }
+  #settingsPage header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding-bottom:14px; flex-shrink:0;
+  }
+  #settingsPage h1{
+    margin:0; font-size:17px; font-weight:700;
+    background: linear-gradient(90deg, var(--gold), var(--accent2));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  #settingsScroll{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+
+  .section-title{
+    font-size:11.5px; font-weight:700; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:.6px;
+    margin: 16px 2px 8px;
+  }
+  .section-title:first-child{ margin-top:0; }
+
+  .tz-row{
+    display:flex; align-items:center; gap:10px;
+    background:var(--card); border:1px solid var(--card-border);
+    border-radius:14px; padding:12px 14px; margin-bottom:9px;
+    cursor:pointer;
+  }
+  .tz-row.selected{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .tz-info{ flex:1; min-width:0; }
+  .tz-name{ font-size:14.5px; font-weight:700; }
+  .tz-arabic{ font-size:12px; color:var(--accent2); direction:rtl; margin-top:2px; }
+  .tz-meta{ font-size:10.5px; color:var(--text-dim); margin-top:3px; }
+  .tz-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .tz-icon{
+    width:30px; height:30px; border-radius:50%;
+    background:rgba(255,255,255,.05); border:1px solid var(--card-border);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim); font-size:13px;
+  }
+  .tz-icon.danger{ color:var(--danger); }
+  .tz-icon.mic-on{ color:var(--accent); border-color:rgba(62,230,180,.5); }
+
+  .add-row{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    border:2px dashed var(--card-border); border-radius:14px;
+    padding:14px; color:var(--text-dim); font-size:13.5px; cursor:pointer;
+    margin-bottom:9px;
+  }
+  .add-row .plus{ font-size:20px; color:var(--accent); }
+
+  /* ================= EDIT SHEET ================= */
+  #overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.65);
+    display:none; align-items:flex-end; justify-content:center; z-index:50;
+  }
+  #overlay.show{ display:flex; }
+  #sheet{
+    width:100%; max-width:480px; max-height:90vh; overflow-y:auto;
+    background:#121826; border:1px solid var(--card-border);
+    border-radius:20px 20px 0 0;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    transform:translateY(100%);
+    transition:transform .25s ease;
+  }
+  #overlay.show #sheet{ transform:translateY(0); }
+  #sheet h3{ margin:0 0 14px; font-size:16px; color:var(--gold); }
+  #sheet label{ display:block; font-size:12px; color:var(--text-dim); margin:10px 0 4px; }
+  #sheet input, #sheet select{
+    width:100%; padding:11px 12px; border-radius:10px;
+    border:1px solid var(--card-border); background:#161d2e;
+    color:#e8edf7; font-size:14px;
+  }
+  .goal-presets{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .preset-btn{
+    padding:8px 12px; border-radius:10px; border:1px solid var(--card-border);
+    background:#161d2e; color:#cfd8ea; font-size:12.5px; font-weight:700; cursor:pointer;
+  }
+  .preset-btn.sel{ background:linear-gradient(90deg, var(--accent), var(--accent2)); color:#06241a; border-color:transparent; }
+  .preset-btn:active{ transform:scale(.95); }
+  .audio-box{
+    margin-top:10px; background:#161d2e; border:1px solid var(--card-border);
+    border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px;
+  }
+  .audio-controls{ display:flex; gap:8px; align-items:center; }
+  .rec-btn{
+    flex:1; padding:10px; border-radius:10px; border:none; font-weight:600; font-size:13px; cursor:pointer;
+    background:var(--card-border); color:#e8edf7;
+  }
+  .rec-btn.recording{ background:var(--danger); color:#fff; animation: recpulse 1s infinite; }
+  @keyframes recpulse{ 0%,100%{opacity:1;} 50%{opacity:.6;} }
+  .rec-status{ font-size:11.5px; color:var(--text-dim); }
+
+  .sheet-actions{ display:flex; gap:10px; margin-top:18px; }
+  .sheet-actions button{
+    flex:1; padding:12px; border-radius:12px; border:none; font-weight:600; font-size:14px; cursor:pointer;
+  }
+  .sheet-actions .save{ background: linear-gradient(90deg, var(--accent), var(--accent2)); color:#06241a;}
+  .sheet-actions .cancel{ background:#1b2436; color:var(--text-dim); border:1px solid var(--card-border); }
+
+  /* ================= PICKER SHEET ================= */
+  #resetOverlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.65);
+    display:none; align-items:flex-end; justify-content:center; z-index:55;
+  }
+  #resetOverlay.show{ display:flex; }
+  #resetSheet{
+    width:100%; max-width:480px;
+    background:#121826; border:1px solid var(--card-border);
+    border-radius:20px 20px 0 0;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    transform:translateY(100%);
+    transition:transform .25s ease;
+  }
+  #resetOverlay.show #resetSheet{ transform:translateY(0); }
+  #resetSheet h3{ margin:0 0 14px; font-size:16px; color:var(--gold); }
+
+  #pickerOverlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.65);
+    display:none; align-items:flex-end; justify-content:center; z-index:50;
+  }
+  #pickerOverlay.show{ display:flex; }
+  #pickerSheet{
+    width:100%; max-width:480px; max-height:80vh; overflow-y:auto;
+    background:#121826; border:1px solid var(--card-border);
+    border-radius:20px 20px 0 0;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    transform:translateY(100%);
+    transition:transform .25s ease;
+  }
+  #pickerOverlay.show #pickerSheet{ transform:translateY(0); }
+  #pickerSheet h3{ margin:0 0 14px; font-size:16px; color:var(--gold); }
+
+  #toast{
+    position:fixed; left:50%; bottom:28px; transform:translate(-50%, 20px);
+    background:#1b2436; border:1px solid var(--card-border);
+    padding:10px 18px; border-radius:30px; font-size:13px; color:#fff;
+    opacity:0; transition:all .25s ease; z-index:60; pointer-events:none;
+    box-shadow:0 6px 20px rgba(0,0,0,.4); max-width:88%; text-align:center;
+  }
+  #toast.show{ opacity:1; transform:translate(-50%, 0); }
+
+  /* ---------- COLOR PICKER SHEET ---------- */
+  #colorOverlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.65);
+    display:none; align-items:flex-end; justify-content:center; z-index:55;
+  }
+  #colorOverlay.show{ display:flex; }
+  #colorSheet{
+    width:100%; max-width:480px;
+    background:#121826; border:1px solid var(--card-border);
+    border-radius:20px 20px 0 0;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    transform:translateY(100%);
+    transition:transform .25s ease;
+  }
+  #colorOverlay.show #colorSheet{ transform:translateY(0); }
+  #colorSheet h3{ margin:0 0 14px; font-size:16px; color:var(--gold); }
+  .color-swatches{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .swatch{
+    width:40px; height:40px; border-radius:50%; cursor:pointer;
+    border:2px solid transparent;
+  }
+  .swatch.sel{ border-color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,.3); }
+  .custom-color-row{ display:flex; align-items:center; gap:12px; }
+  .custom-color-row label{ font-size:13px; color:var(--text-dim); flex:1; }
+  .custom-color-row input[type=color]{
+    width:52px; height:40px; border:1px solid var(--card-border); border-radius:10px;
+    background:#161d2e; padding:2px; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= MAIN SCREEN ================= -->
+  <div class="page active" id="mainPage">
+    <div class="top-bar">
+      <div class="icon-btn" id="settingsBtn" title="Настройки">⚙</div>
+      <div class="tasbih-select-row" style="flex:1; margin:0 10px;">
+        <div class="tasbih-pick" id="tasbihPickBtn">
+          <span id="currentTasbihLabel">Выберите тасбих</span>
+          <span class="chev">▾</span>
+        </div>
+      </div>
+      <div class="icon-btn" id="colorBtn" title="Цвет текста">🎨</div>
+      <div class="icon-btn" id="displayModeBtn" title="Режим показа">⏳</div>
+    </div>
+
+    <div class="stage" id="stage">
+      <div id="nameDisplay"></div>
+      <div id="countDisplay">0</div>
+      <div class="goal-line" id="goalLine"></div>
+      <div class="idle-hint" id="idleHint">Коснитесь экрана, чтобы считать вручную, или нажмите «Старт» для автосчёта</div>
+    </div>
+
+    <div class="controls">
+      <div class="speed-row">
+        <label>Скорость</label>
+        <input type="range" id="speedSlider" min="1" max="20" step="1" value="3">
+        <div class="speed-val" id="speedVal">3 сек</div>
+      </div>
+      <div class="btn-row">
+        <div class="big-btn reset" id="resetBtn">↺ Сброс</div>
+        <div class="big-btn start" id="startStopBtn">▶ Старт</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SETTINGS PAGE ================= -->
+  <div class="page" id="settingsPage">
+    <header>
+      <div class="icon-btn" id="backFromSettings">←</div>
+      <h1>Настройки — тасбихи</h1>
+      <div style="width:40px;"></div>
+    </header>
+    <div id="settingsScroll">
+      <div class="section-title">Список тасбихов</div>
+      <div id="tasbihList"></div>
+      <div class="add-row" id="addTasbihBtn"><div class="plus">+</div><div>Добавить тасбих</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- EDIT SHEET -->
+<div id="overlay">
+  <div id="sheet">
+    <h3 id="sheetTitle">Изменить тасбих</h3>
+    <label>Арабский текст (необязательно)</label>
+    <input id="editArabic" maxlength="100" placeholder="سُبْحَانَ الله">
+    <label>Название / транслитерация</label>
+    <input id="editName" maxlength="60" placeholder="СубханАллах">
+    <label>Цель (необязательно, 0 = нет)</label>
+    <input id="editGoal" type="number" inputmode="numeric" placeholder="33">
+    <div class="goal-presets" id="goalPresets">
+      <button type="button" class="preset-btn" data-g="33">33</button>
+      <button type="button" class="preset-btn" data-g="100">100</button>
+      <button type="button" class="preset-btn" data-g="500">500</button>
+      <button type="button" class="preset-btn" data-g="1000">1000</button>
+      <button type="button" class="preset-btn" data-g="0">без цели</button>
+    </div>
+
+    <label>Звук счёта</label>
+    <select id="editSoundType">
+      <option value="tick">Тик</option>
+      <option value="beep">Пик</option>
+      <option value="bell">Дринк</option>
+      <option value="pulse">Пульс (сердцебиение)</option>
+    </select>
+
+    <div class="audio-box">
+      <label style="margin:0;">Свой звук / голосовая запись (приоритет над выбранным выше)</label>
+      <div class="audio-controls">
+        <button class="rec-btn" id="recBtn">⏺ Записать</button>
+        <button class="rec-btn" id="playBtn" style="flex:0 0 46px;">▶</button>
+        <button class="rec-btn" id="delRecBtn" style="flex:0 0 46px;">✕</button>
+      </div>
+      <button class="rec-btn" id="uploadBtn">📁 Загрузить файл с диктофона</button>
+      <input type="file" id="audioFileInput" accept="audio/*" style="display:none;">
+      <div class="rec-status" id="recStatus">Записи нет — будет играть стандартный сигнал</div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="cancel" id="cancelEdit">Отмена</button>
+      <button class="save" id="saveEdit">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESET CHOICE SHEET -->
+<div id="resetOverlay">
+  <div id="resetSheet">
+    <h3>Что сбросить?</h3>
+    <div class="sheet-actions" style="margin-top:4px; flex-direction:column;">
+      <button class="save" id="resetCurrentBtn" style="margin-bottom:10px;">Только текущий тасбих</button>
+      <button class="save" id="resetAllBtn" style="background:linear-gradient(90deg, var(--danger), #ff9472); color:#2a0a0a; margin-bottom:10px;">Сбросить всё</button>
+      <button class="cancel" id="resetCancelBtn">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- COLOR PICKER SHEET -->
+<div id="colorOverlay">
+  <div id="colorSheet">
+    <h3>Цвет текста</h3>
+    <div class="color-swatches" id="colorSwatches"></div>
+    <div class="custom-color-row">
+      <label>Свой цвет</label>
+      <input type="color" id="customColorInput">
+    </div>
+  </div>
+</div>
+
+<!-- PICKER SHEET -->
+<div id="pickerOverlay">
+  <div id="pickerSheet">
+    <h3>Выбрать тасбих</h3>
+    <div id="pickerList"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  const STORAGE_KEY = "zikr_autocounter_v1";
+  const CURRENT_KEY = "zikr_current_id";
+  const SPEED_KEY = "zikr_speed_sec";
+  const COLOR_KEY = "zikr_text_color";
+  const DISPLAY_MODE_KEY = "zikr_display_mode"; // 'flash' = появляется и исчезает, 'static' = всегда на экране
+
+  const COLOR_SWATCHES = [
+    "#ffffff","#3ee6b4","#7fd4ff","#ffd27a",
+    "#ff8fb1","#c08bff","#6ee7ff","#ffb86b",
+    "#9dff8f","#ff7a7a","#d29bff","#ffe06b"
+  ];
+
+  const DEFAULTS = [
+    {name:"سُبْحَانَ الله", label:"СубханАллах", count:0, goal:33, soundType:"tick"},
+    {name:"الْحَمْدُ لِله", label:"Альхамдулиллях", count:0, goal:33, soundType:"tick"},
+    {name:"اللَّهُ أَكْبَر", label:"Аллаху Акбар", count:0, goal:34, soundType:"tick"},
+    {name:"لَا إِلَٰهَ إِلَّا اللَّه", label:"Ля иляха илля Ллах", count:0, goal:100, soundType:"beep"},
+    {name:"أَسْتَغْفِرُ اللَّه", label:"Астагфируллах", count:0, goal:100, soundType:"beep"},
+    {name:"لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّه", label:"Ля хауля уа ля куввата илля биЛлях", count:0, goal:0, soundType:"tick"},
+    {name:"اللَّهُمَّ صَلِّ عَلَى مُحَمَّد", label:"Салават на Пророка", count:0, goal:100, soundType:"bell"},
+    {name:"بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", label:"Бисмилляхи ррахмани ррахим", count:0, goal:0, soundType:"tick"},
+    {name:"حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيل", label:"Хасбунал-Лах", count:0, goal:0, soundType:"tick"},
+    {name:"رَبِّ اغْفِرْ لِي", label:"Рабби-гфир ли", count:0, goal:0, soundType:"tick"}
+  ];
+
+  // ---------- IndexedDB for audio blobs ----------
+  let dbPromise = new Promise((resolve, reject)=>{
+    const req = indexedDB.open("zikrAudioDB", 1);
+    req.onupgradeneeded = ()=> req.result.createObjectStore("clips");
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+  async function idbSet(key, blob){
+    const db = await dbPromise;
+    return new Promise((res,rej)=>{
+      const tx = db.transaction("clips","readwrite");
+      tx.objectStore("clips").put(blob, key);
+      tx.oncomplete = ()=>res();
+      tx.onerror = ()=>rej(tx.error);
+    });
+  }
+  async function idbGet(key){
+    const db = await dbPromise;
+    return new Promise((res,rej)=>{
+      const tx = db.transaction("clips","readonly");
+      const r = tx.objectStore("clips").get(key);
+      r.onsuccess = ()=>res(r.result || null);
+      r.onerror = ()=>rej(r.error);
+    });
+  }
+  async function idbDelete(key){
+    const db = await dbPromise;
+    return new Promise((res,rej)=>{
+      const tx = db.transaction("clips","readwrite");
+      tx.objectStore("clips").delete(key);
+      tx.oncomplete = ()=>res();
+      tx.onerror = ()=>rej(tx.error);
+    });
+  }
+
+  function uid(){ return 'b'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+  function loadData(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    }catch(e){}
+    return DEFAULTS.map(d => Object.assign({}, d, {id: uid(), hasAudio:false}));
+  }
+  let data = loadData();
+  data.forEach(d=>{ if(!d.soundType) d.soundType = 'tick'; });
+
+  function saveData(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+  }
+
+  let currentId = localStorage.getItem(CURRENT_KEY) || (data[0] && data[0].id);
+  let speedSec = parseInt(localStorage.getItem(SPEED_KEY),10) || 3;
+  let running = false;
+  let timerHandle = null;
+  let wakeLock = null;
+
+  function currentItem(){ return data.find(d=>d.id===currentId) || data[0]; }
+
+  function vibrate(ms){ if(navigator.vibrate){ try{ navigator.vibrate(ms); }catch(e){} } }
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=>t.classList.remove('show'), 1800);
+  }
+
+  function escapeHtml(s){
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // ---------- SOUND ----------
+  let actx = null;
+  function getActx(){
+    if(!actx){ try{ actx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){} }
+    return actx;
+  }
+  function playOsc(freq, type, start, dur, peak, slideTo){
+    const ctx = getActx();
+    if(!ctx) return;
+    if(ctx.state === 'suspended') ctx.resume();
+    const t0 = ctx.currentTime + start;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t0+dur);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(peak||0.25, t0+0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0+dur+0.02);
+  }
+  // три пресета обычного звука счёта
+  function playTick(){   playOsc(1500, 'square', 0, 0.045, 0.14); }
+  function playBeep(){   playOsc(880,  'sine',   0, 0.14,  0.24); }
+  function playDrink(){
+    playOsc(1047, 'sine', 0,    0.22, 0.22);
+    playOsc(1568, 'sine', 0.05, 0.28, 0.16);
+  }
+  // звук пульса (как на кардиомониторе) — два коротких удара "лаб-дап"
+  function playPulse(){
+    playOsc(140, 'sine', 0,    0.09, 0.3);
+    playOsc(120, 'sine', 0.14, 0.11, 0.22);
+  }
+  function playTickSound(type){
+    if(type === 'beep') playBeep();
+    else if(type === 'bell') playDrink();
+    else if(type === 'pulse') playPulse();
+    else playTick();
+  }
+  // отдельный, заметно другой сигнал при достижении цели
+  function playMilestoneSound(){
+    playOsc(660, 'triangle', 0,    0.18, 0.26, 990);
+    playOsc(990, 'triangle', 0.16, 0.22, 0.24, 1320);
+    playOsc(1320,'triangle', 0.34, 0.30, 0.22);
+  }
+  // длинный сигнал "остановка пульса" (как плоская линия на кардиомониторе) — каждые 100
+  function playFlatline(){
+    playOsc(840, 'sine', 0, 1.8, 0.3);
+  }
+  async function playSignal(item){
+    if(item.hasAudio){
+      try{
+        const blob = await idbGet(item.id);
+        if(blob){
+          const url = URL.createObjectURL(blob);
+          const a = new Audio(url);
+          a.play().catch(()=>{});
+          a.onended = ()=> URL.revokeObjectURL(url);
+          return;
+        }
+      }catch(e){}
+    }
+    playTickSound(item.soundType);
+  }
+
+  // ---------- MAIN STAGE ----------
+  const nameDisplay = document.getElementById('nameDisplay');
+  const countDisplay = document.getElementById('countDisplay');
+  const goalLine = document.getElementById('goalLine');
+  const idleHint = document.getElementById('idleHint');
+  const currentTasbihLabel = document.getElementById('currentTasbihLabel');
+
+  let displayMode = localStorage.getItem(DISPLAY_MODE_KEY) || 'flash';
+  const displayModeBtn = document.getElementById('displayModeBtn');
+  function applyDisplayModeIcon(){
+    displayModeBtn.textContent = displayMode === 'static' ? '📌' : '⏳';
+    displayModeBtn.title = displayMode === 'static'
+      ? 'Режим: всегда на экране (нажмите для вспышки)'
+      : 'Режим: вспышка (нажмите для «всегда на экране»)';
+  }
+  applyDisplayModeIcon();
+
+  function renderStageStatic(){
+    const item = currentItem();
+    if(!item){
+      currentTasbihLabel.textContent = 'Нет тасбихов';
+      countDisplay.textContent = '0';
+      goalLine.textContent = '';
+      nameDisplay.classList.remove('show');
+      countDisplay.classList.remove('show');
+      return;
+    }
+    currentTasbihLabel.textContent = item.label;
+    countDisplay.textContent = item.count;
+    goalLine.textContent = item.goal>0 ? `цель: ${item.count % item.goal || (item.count>0?item.goal:0)}/${item.goal}` : '';
+
+    if(displayMode === 'static'){
+      nameDisplay.innerHTML = (item.name ? `<span class="arabic">${escapeHtml(item.name)}</span>` : '') + escapeHtml(item.label);
+      nameDisplay.classList.add('show');
+      countDisplay.classList.add('show');
+    } else {
+      nameDisplay.classList.remove('show');
+      countDisplay.classList.remove('show');
+    }
+  }
+
+  displayModeBtn.addEventListener('click', ()=>{
+    displayMode = (displayMode === 'static') ? 'flash' : 'static';
+    try{ localStorage.setItem(DISPLAY_MODE_KEY, displayMode); }catch(e){}
+    applyDisplayModeIcon();
+    clearTimeout(hideTimer);
+    renderStageStatic();
+    showToast(displayMode === 'static' ? 'Текст всегда на экране' : 'Режим вспышки (появляется и исчезает)');
+  });
+
+  let hideTimer = null;
+
+  function tick(){
+    const item = currentItem();
+    if(!item) return;
+    item.count++;
+    saveData();
+    vibrate(15);
+
+    const isMilestone = item.goal > 0 && item.count > 0 && item.count % item.goal === 0;
+    const isHundred = item.count > 0 && item.count % 100 === 0;
+
+    if(isHundred){
+      playFlatline();
+    } else if(isMilestone){
+      playMilestoneSound();
+    } else {
+      playSignal(item);
+    }
+
+    clearTimeout(hideTimer);
+    nameDisplay.innerHTML = (item.name ? `<span class="arabic">${escapeHtml(item.name)}</span>` : '') + escapeHtml(item.label);
+    countDisplay.textContent = item.count;
+    countDisplay.style.color = isMilestone ? 'var(--gold)' : '';
+
+    if(displayMode === 'static'){
+      // текст всегда на экране — просто обновляем значения, без мигания анимацией
+      nameDisplay.classList.add('show');
+      countDisplay.classList.add('show');
+    } else {
+      // тёмный экран -> текст и счёт появляются
+      nameDisplay.classList.remove('show'); void nameDisplay.offsetWidth; nameDisplay.classList.add('show');
+      countDisplay.classList.remove('show'); void countDisplay.offsetWidth; countDisplay.classList.add('show');
+    }
+
+    goalLine.textContent = item.goal>0 ? `цель: ${item.count % item.goal || item.goal}/${item.goal}` : '';
+    if(isHundred){
+      vibrate([30,80,30,80,30,400]);
+      showToast(`${item.label}: ${item.count}!`);
+    } else if(isMilestone){
+      vibrate([20,40,20,40,20]);
+      showToast(`${item.label}: цель ${item.goal} достигнута! (${item.count})`);
+    }
+
+    // в режиме «вспышка» текст и счёт снова гаснут, оставляя тёмный экран до следующего тика;
+    // в режиме «всегда на экране» текст остаётся показан постоянно
+    if(displayMode !== 'static'){
+      const holdMs = isHundred
+        ? Math.min(2200, Math.max(1800, speedSec*1000*0.8))
+        : Math.min(1600, Math.max(600, speedSec*1000*0.55));
+      hideTimer = setTimeout(()=>{
+        nameDisplay.classList.remove('show');
+        countDisplay.classList.remove('show');
+      }, holdMs);
+    }
+  }
+
+  function startCounting(){
+    if(!currentItem()){ showToast('Сначала выберите тасбих'); return; }
+    running = true;
+    idleHint.style.display = 'none';
+    document.getElementById('startStopBtn').innerHTML = '⏸ Стоп';
+    document.getElementById('startStopBtn').classList.remove('start');
+    document.getElementById('startStopBtn').classList.add('stop');
+    tick();
+    clearInterval(timerHandle);
+    timerHandle = setInterval(tick, speedSec*1000);
+    requestWakeLock();
+    // через короткую паузу прячем все кнопки — остаётся только тасбих и счёт
+    clearTimeout(chromeTimer);
+    chromeTimer = setTimeout(()=>{
+      mainPage.classList.add('running');
+      mainPage.classList.remove('chrome-visible');
+    }, 900);
+  }
+
+  function stopCounting(){
+    running = false;
+    clearInterval(timerHandle);
+    timerHandle = null;
+    clearTimeout(hideTimer);
+    clearTimeout(chromeTimer);
+    mainPage.classList.remove('running');
+    mainPage.classList.remove('chrome-visible');
+    document.getElementById('startStopBtn').innerHTML = '▶ Старт';
+    document.getElementById('startStopBtn').classList.remove('stop');
+    document.getElementById('startStopBtn').classList.add('start');
+    releaseWakeLock();
+  }
+
+  let chromeTimer = null;
+
+  // тап по экрану: засчитывает касание (+1 к счёту),
+  // и если идёт автосчёт — ненадолго возвращает кнопки
+  document.getElementById('stage').addEventListener('click', ()=>{
+    tick();
+    if(!running) return;
+    mainPage.classList.add('chrome-visible');
+    clearTimeout(chromeTimer);
+    chromeTimer = setTimeout(()=> mainPage.classList.remove('chrome-visible'), 3500);
+  });
+
+  document.getElementById('startStopBtn').addEventListener('click', ()=>{
+    if(running) stopCounting(); else startCounting();
+  });
+
+  const resetOverlay = document.getElementById('resetOverlay');
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    if(!currentItem()) return;
+    resetOverlay.classList.add('show');
+  });
+  resetOverlay.addEventListener('click', (e)=>{ if(e.target===resetOverlay) resetOverlay.classList.remove('show'); });
+  document.getElementById('resetCancelBtn').addEventListener('click', ()=> resetOverlay.classList.remove('show'));
+
+  document.getElementById('resetCurrentBtn').addEventListener('click', ()=>{
+    const item = currentItem();
+    if(!item) return;
+    item.count = 0;
+    saveData();
+    clearTimeout(hideTimer);
+    countDisplay.style.color = '';
+    renderStageStatic();
+    resetOverlay.classList.remove('show');
+    showToast('Счёт сброшен');
+  });
+
+  document.getElementById('resetAllBtn').addEventListener('click', ()=>{
+    data.forEach(d=> d.count = 0);
+    saveData();
+    clearTimeout(hideTimer);
+    countDisplay.style.color = '';
+    renderStageStatic();
+    resetOverlay.classList.remove('show');
+    showToast('Все счётчики сброшены');
+  });
+
+  // ---------- WAKE LOCK ----------
+  async function requestWakeLock(){
+    try{
+      if('wakeLock' in navigator){
+        wakeLock = await navigator.wakeLock.request('screen');
+      }
+    }catch(e){}
+  }
+  function releaseWakeLock(){
+    if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock = null; }
+  }
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && running) requestWakeLock();
+  });
+
+  // ---------- SPEED SLIDER ----------
+  const speedSlider = document.getElementById('speedSlider');
+  const speedVal = document.getElementById('speedVal');
+  speedSlider.value = speedSec;
+  speedVal.textContent = speedSec + ' сек';
+  speedSlider.addEventListener('input', ()=>{
+    speedSec = parseInt(speedSlider.value,10);
+    speedVal.textContent = speedSec + ' сек';
+    try{ localStorage.setItem(SPEED_KEY, speedSec); }catch(e){}
+    if(running){
+      clearInterval(timerHandle);
+      timerHandle = setInterval(tick, speedSec*1000);
+    }
+  });
+
+  // ---------- TASBIH PICKER ----------
+  const pickerOverlay = document.getElementById('pickerOverlay');
+  const pickerList = document.getElementById('pickerList');
+  document.getElementById('tasbihPickBtn').addEventListener('click', ()=>{
+    renderPickerList();
+    pickerOverlay.classList.add('show');
+  });
+  pickerOverlay.addEventListener('click', (e)=>{ if(e.target===pickerOverlay) pickerOverlay.classList.remove('show'); });
+
+  function renderPickerList(){
+    pickerList.innerHTML = "";
+    data.forEach(item=>{
+      const row = document.createElement('div');
+      row.className = 'tz-row' + (item.id===currentId ? ' selected' : '');
+      row.innerHTML = `
+        <div class="tz-info">
+          <div class="tz-name">${escapeHtml(item.label)}</div>
+          ${item.name ? `<div class="tz-arabic">${escapeHtml(item.name)}</div>` : ''}
+          <div class="tz-meta">счёт: ${item.count}${item.goal>0 ? ' · цель: '+item.goal : ''}${item.hasAudio ? ' · 🎤' : ''}</div>
+        </div>
+      `;
+      row.addEventListener('click', ()=>{
+        if(running) stopCounting();
+        currentId = item.id;
+        try{ localStorage.setItem(CURRENT_KEY, currentId); }catch(e){}
+        clearTimeout(hideTimer);
+        countDisplay.style.color = '';
+        renderStageStatic();
+        idleHint.style.display = '';
+        pickerOverlay.classList.remove('show');
+      });
+      pickerList.appendChild(row);
+    });
+  }
+
+  // ---------- SETTINGS NAV ----------
+  const mainPage = document.getElementById('mainPage');
+  const settingsPage = document.getElementById('settingsPage');
+  document.getElementById('settingsBtn').addEventListener('click', ()=>{
+    if(running) stopCounting();
+    mainPage.classList.remove('active');
+    settingsPage.classList.add('active');
+    renderTasbihList();
+  });
+  document.getElementById('backFromSettings').addEventListener('click', ()=>{
+    settingsPage.classList.remove('active');
+    mainPage.classList.add('active');
+    renderStageStatic();
+  });
+
+  // ---------- SETTINGS LIST ----------
+  const tasbihList = document.getElementById('tasbihList');
+  function renderTasbihList(){
+    tasbihList.innerHTML = "";
+    data.forEach(item=>{
+      const row = document.createElement('div');
+      row.className = 'tz-row' + (item.id===currentId ? ' selected' : '');
+      row.innerHTML = `
+        <div class="tz-info">
+          <div class="tz-name">${escapeHtml(item.label)}</div>
+          ${item.name ? `<div class="tz-arabic">${escapeHtml(item.name)}</div>` : ''}
+          <div class="tz-meta">счёт: ${item.count}${item.goal>0 ? ' · цель: '+item.goal : ''}</div>
+        </div>
+        <div class="tz-actions">
+          <div class="tz-icon ${item.hasAudio?'mic-on':''}" title="Запись">${item.hasAudio?'🎤':'🎙'}</div>
+          <div class="tz-icon edit-icon" title="Изменить">✎</div>
+          <div class="tz-icon danger del-icon" title="Удалить">🗑</div>
+        </div>
+      `;
+      row.querySelector('.edit-icon').addEventListener('click', (e)=>{ e.stopPropagation(); openEdit(item.id); });
+      row.querySelector('.del-icon').addEventListener('click', (e)=>{
+        e.stopPropagation();
+        if(confirm(`Удалить «${item.label}»?`)){
+          data = data.filter(d=>d.id!==item.id);
+          idbDelete(item.id).catch(()=>{});
+          if(currentId===item.id) currentId = data[0] && data[0].id;
+          saveData();
+          renderTasbihList();
+        }
+      });
+      row.addEventListener('click', ()=>{
+        currentId = item.id;
+        try{ localStorage.setItem(CURRENT_KEY, currentId); }catch(e){}
+        renderTasbihList();
+      });
+      tasbihList.appendChild(row);
+    });
+  }
+  document.getElementById('addTasbihBtn').addEventListener('click', ()=> openEdit(null));
+
+  // ---------- EDIT SHEET ----------
+  const overlay = document.getElementById('overlay');
+  let editingId = null;
+  let recState = { recorder:null, chunks:[], blob:null, stream:null, hadOriginal:false };
+
+  function resetRecState(had){
+    recState = { recorder:null, chunks:[], blob:null, stream:null, hadOriginal: had };
+    document.getElementById('recBtn').textContent = '⏺ Записать';
+    document.getElementById('recBtn').classList.remove('recording');
+  }
+
+  function openEdit(id){
+    editingId = id;
+    const isNew = id === null;
+    document.getElementById('sheetTitle').textContent = isNew ? 'Новый тасбих' : 'Изменить тасбих';
+    const item = isNew ? {name:"", label:"", goal:0, hasAudio:false} : data.find(d=>d.id===id);
+
+    document.getElementById('editArabic').value = item.name || "";
+    document.getElementById('editName').value = item.label || "";
+    document.getElementById('editGoal').value = item.goal || 0;
+    document.getElementById('editSoundType').value = item.soundType || 'tick';
+    markPresetSelection(item.goal || 0);
+
+    resetRecState(!!item.hasAudio);
+    updateRecStatus();
+
+    overlay.classList.add('show');
+  }
+
+  function markPresetSelection(goalVal){
+    document.querySelectorAll('#goalPresets .preset-btn').forEach(b=>{
+      b.classList.toggle('sel', parseInt(b.dataset.g,10) === goalVal);
+    });
+  }
+  document.getElementById('goalPresets').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.preset-btn');
+    if(!btn) return;
+    const g = parseInt(btn.dataset.g,10);
+    document.getElementById('editGoal').value = g;
+    markPresetSelection(g);
+  });
+  document.getElementById('editGoal').addEventListener('input', (e)=>{
+    markPresetSelection(parseInt(e.target.value,10) || 0);
+  });
+
+  function updateRecStatus(){
+    const statusEl = document.getElementById('recStatus');
+    if(recState.blob){
+      statusEl.textContent = 'Новая запись готова (будет сохранена)';
+    } else if(recState.hadOriginal){
+      statusEl.textContent = 'Есть сохранённая запись — играет при счёте';
+    } else {
+      statusEl.textContent = 'Записи нет — будет играть стандартный сигнал';
+    }
+  }
+
+  document.getElementById('recBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('recBtn');
+    if(btn.classList.contains('recording')){
+      if(recState.recorder && recState.recorder.state === 'recording'){
+        recState.recorder.stop();
+      }
+      return;
+    }
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      recState.stream = stream;
+      const mr = new MediaRecorder(stream);
+      recState.recorder = mr;
+      recState.chunks = [];
+      mr.ondataavailable = (e)=>{ if(e.data.size>0) recState.chunks.push(e.data); };
+      mr.onstop = ()=>{
+        recState.blob = new Blob(recState.chunks, {type: mr.mimeType || 'audio/webm'});
+        stream.getTracks().forEach(t=>t.stop());
+        btn.textContent = '⏺ Записать';
+        btn.classList.remove('recording');
+        updateRecStatus();
+      };
+      mr.start();
+      btn.textContent = '⏹ Стоп';
+      btn.classList.add('recording');
+      document.getElementById('recStatus').textContent = 'Идёт запись...';
+    }catch(err){
+      showToast('Нет доступа к микрофону');
+    }
+  });
+
+  document.getElementById('playBtn').addEventListener('click', async ()=>{
+    if(recState.blob){
+      const url = URL.createObjectURL(recState.blob);
+      new Audio(url).play().catch(()=>{});
+      return;
+    }
+    if(recState.hadOriginal && editingId){
+      const blob = await idbGet(editingId);
+      if(blob){
+        const url = URL.createObjectURL(blob);
+        new Audio(url).play().catch(()=>{});
+        return;
+      }
+    }
+    showToast('Нет записи для воспроизведения');
+  });
+
+  document.getElementById('delRecBtn').addEventListener('click', ()=>{
+    recState.blob = null;
+    recState.hadOriginal = false;
+    updateRecStatus();
+  });
+
+  document.getElementById('uploadBtn').addEventListener('click', ()=>{
+    document.getElementById('audioFileInput').click();
+  });
+  document.getElementById('audioFileInput').addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(!file.type.startsWith('audio/')){
+      showToast('Выберите аудиофайл');
+      e.target.value = '';
+      return;
+    }
+    recState.blob = file;
+    updateRecStatus();
+    showToast('Файл выбран: ' + file.name);
+    e.target.value = '';
+  });
+
+  document.getElementById('cancelEdit').addEventListener('click', closeSheet);
+  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeSheet(); });
+  function closeSheet(){
+    if(recState.recorder && recState.recorder.state === 'recording'){
+      recState.recorder.stop();
+    }
+    overlay.classList.remove('show');
+  }
+
+  document.getElementById('saveEdit').addEventListener('click', async ()=>{
+    const arabic = document.getElementById('editArabic').value.trim();
+    const name = document.getElementById('editName').value.trim();
+    const goal = parseInt(document.getElementById('editGoal').value,10);
+    const soundType = document.getElementById('editSoundType').value || 'tick';
+
+    if(!name){ showToast('Укажите название тасбиха'); return; }
+
+    let id = editingId;
+    let hasAudio = recState.hadOriginal;
+
+    if(id === null){
+      id = uid();
+      data.push({ id, name: arabic, label: name, count:0, goal: isNaN(goal)?0:Math.max(0,goal), soundType, hasAudio:false });
+      if(!currentId) currentId = id;
+    } else {
+      const item = data.find(d=>d.id===id);
+      item.name = arabic;
+      item.label = name;
+      item.goal = isNaN(goal) ? 0 : Math.max(0,goal);
+      item.soundType = soundType;
+    }
+
+    if(recState.blob){
+      await idbSet(id, recState.blob);
+      hasAudio = true;
+    } else if(!recState.hadOriginal && !recState.blob){
+      const item = data.find(d=>d.id===id);
+      if(item && item.hasAudio){
+        await idbDelete(id).catch(()=>{});
+      }
+      hasAudio = false;
+    }
+
+    const item = data.find(d=>d.id===id);
+    item.hasAudio = hasAudio;
+
+    saveData();
+    closeSheet();
+    renderTasbihList();
+  });
+
+  // ---------- TEXT COLOR ----------
+  let textColor = localStorage.getItem(COLOR_KEY) || '#ffffff';
+  function applyTextColor(color){
+    textColor = color;
+    document.documentElement.style.setProperty('--text-color', color);
+    try{ localStorage.setItem(COLOR_KEY, color); }catch(e){}
+  }
+  applyTextColor(textColor);
+
+  const colorOverlay = document.getElementById('colorOverlay');
+  const colorSwatches = document.getElementById('colorSwatches');
+  const customColorInput = document.getElementById('customColorInput');
+
+  function renderColorSwatches(){
+    colorSwatches.innerHTML = "";
+    COLOR_SWATCHES.forEach(c=>{
+      const sw = document.createElement('div');
+      sw.className = 'swatch' + (c.toLowerCase()===textColor.toLowerCase() ? ' sel' : '');
+      sw.style.background = c;
+      sw.addEventListener('click', ()=>{
+        applyTextColor(c);
+        renderColorSwatches();
+      });
+      colorSwatches.appendChild(sw);
+    });
+  }
+
+  document.getElementById('colorBtn').addEventListener('click', ()=>{
+    customColorInput.value = textColor;
+    renderColorSwatches();
+    colorOverlay.classList.add('show');
+  });
+  colorOverlay.addEventListener('click', (e)=>{ if(e.target===colorOverlay) colorOverlay.classList.remove('show'); });
+  customColorInput.addEventListener('input', (e)=>{
+    applyTextColor(e.target.value);
+    renderColorSwatches();
+  });
+
+  // ---------- INIT ----------
+  renderStageStatic();
+})();
+</script>
+</body>
+</html>
